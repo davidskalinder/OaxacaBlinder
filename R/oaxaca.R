@@ -1,27 +1,113 @@
+#' Create a \code{.do} file to run a command and save estimates
+#'
+#' Internal function to write a \code{.do} file that will run a
+#' command and export a file suitable for reading with
+#' \code{read_stata_estimates}.
+#'
+#' @param command String of Stata estimation command.
+#' @param do_path Path to \code{.do} file to save.
+#' @param dta_file Data file for Stata to use in same directory as
+#'   \code{.do} file.
+#' @param est_file Filename (without extension) Stata to save estimate results in same
+#'   directory as \code{.do} file.
+#'
+#' @return Nothing, called only for its side effect of writing the
+#'   \code{.do} file.
+make_decomp_dofile <- function(command, do_path, dta_file, est_file) {
+  do_file_text <-
+    c(
+      "clear all",
+      paste("use", basename(dta_file)),
+      command,
+      paste0(
+        "etable, cstat(_r_b, nformat(%8.0g)) export(",
+        basename(est_file),
+        ".xlsx, replace)"
+      )
+    )
+
+  cat(do_file_text, file = do_path, sep = "\n")
+
+  message(
+    paste0(
+      basename(do_path), " saved to ", dirname(do_path),
+      ".\nRun `do ", basename(do_path),
+      "` in Stata to produce new test baselines."
+    )
+  )
+  invisible(command)
+}
+
+#' Read estimates from Stata's Excel export
+#'
+#' This internal function reads the estimates produced by running
+#' Jann's \code{oaxaca} command in Stata.  The estimates should be
+#' exported to a file with extension \code{xlsx} or \code{xls}
+#' using Stata using the \code{etable} command, with the option
+#' \code{cstat(_r_b)} to ensure that standard errors are not
+#' included.
+#'
+#' @param path The path to the Excel file.
+#'
+#' @return A data frame with the same rows and columns as would be
+#'   produced in the \code{varlevel} element of the output of
+#'   \code{OaxacaBlinderDecomp} (though the rows might be in a
+#'   different order).
+read_stata_estimates <- function(path) {
+  stata_estimates <-
+    readxl::read_excel(
+      path = path,
+      col_names = c("name", "value"),
+      col_types = c("text", "numeric"),
+      skip = 1
+    )
+
+  drops <-
+    c("group_1", "group_2", "difference", "endowments",
+      "coefficients", "interaction", "N")
+
+  estimates <-
+    stata_estimates[!(stata_estimates$name %in% drops), ]
+  n_x <- (nrow(estimates) - 1) / 3
+  endowments <- estimates[1:n_x, ]
+  coefficients <- estimates[(n_x + 1):(2 * n_x + 1), ]
+  interactions <- estimates[(2 * n_x + 2):nrow(estimates), ]
+
+  endowments_padded <- rbind(endowments, list("(Intercept)", 0))
+  interactions_padded <- rbind(interactions, list("(Intercept)", 0))
+
+  varlevel <-
+    cbind(
+      endowments_padded[2],
+      coefficients[2],
+      interactions_padded[2]
+    )
+  rownames(varlevel) <- endowments_padded[[1]]
+  colnames(varlevel) <-
+    c("endowments", "coefficients", "interaction")
+  varlevel_intfirst <-
+    varlevel[c(nrow(varlevel), 1:(nrow(varlevel) - 1)), ]
+  varlevel_intfirst
+}
 
 parse_formula <- function(formula) {
   # convert to character and split in depvar, indepvar and groupvar
   fml_str <- as.character(formula)
   lhs <- fml_str[2]
   rhs <- fml_str[3]
-  rhs <- strsplit(
-    x = gsub("\\s+", "", rhs),
-    split = "|",
-    fixed = TRUE
-  )[[1]]
+  rhs <- strsplit(x = gsub("\\s+", "", rhs),
+                  split = "|",
+                  fixed = TRUE)[[1]]
   group_var <- rhs[2]
   rhs <- rhs[1]
 
   # returns list of character strings
-  list(
-    dep_var = lhs,
-    indep_var = rhs,
-    group_var = group_var
-  )
+  list(dep_var = lhs,
+       indep_var = rhs,
+       group_var = group_var)
 }
 
 modify_group_var_to_dummy = function(data, formula, ref_group_auto, ref_group){
-
   # parse fml for group/dep var
   fml_comp = parse_formula(formula)
   group_var = fml_comp$group_var
@@ -60,18 +146,14 @@ modify_group_var_to_dummy = function(data, formula, ref_group_auto, ref_group){
   }
 
   # return with levels specification for metainfo
-  list(
-    data = data,
-    group_levels = c(group1, group2)
-  )
+  list(data = data,
+       group_levels = c(group1, group2))
 
 }
 
-calculate_gap <- function(formula, data_a, data_b) {
-  fml_comp <- parse_formula(formula)
-
-  EY_a <- mean(data_a[[fml_comp$dep_var]], na.rm = TRUE)
-  EY_b <- mean(data_b[[fml_comp$dep_var]], na.rm = TRUE)
+calculate_gap <- function(y_a, y_b) {
+  EY_a <- mean(y_a, na.rm = TRUE)
+  EY_b <- mean(y_b, na.rm = TRUE)
 
   gap <- EY_a - EY_b
   pct_gap <- gap / EY_a
@@ -84,49 +166,81 @@ calculate_gap <- function(formula, data_a, data_b) {
   )
 }
 
+assemble_model <- function(formula, data) {
+  fml_comp <- parse_formula(formula)
+  # Get DV as it will be in model
+  y <- model.frame(data)[[fml_comp$dep_var]]
+  # Expand matrix manually to keep all factor levels
+  modmat <- model.matrix(formula, data)
+  # Save original formula terms
+  terms <- terms(formula)
+  # Fit w/ all levels and clean names except for intercepts
+  fit <- lm(y ~ . - 1, data = data.frame(y, modmat))
+
+  list(y = y, modmat = modmat, terms = terms, fit = fit)
+}
+
 fit_models <- function(formula, data) {
   # get formula components
   fml_comp <- parse_formula(formula)
 
+  # Convert character cols to factors
+  data <-
+    lapply(
+      data,
+      function(x) {
+        if (is.character(x)) x <- as.factor(x)
+        # Set explicitly to matrix so models won't drop levels
+        if (is.factor(x)) contrasts(x) <- contrasts(x)
+        x
+      }
+    ) |>
+    data.frame()
+
   # filter datasets for group a/b
   idx <- data[[fml_comp$group_var]] == 0
-  data_a <- data[idx, ]
-  data_b <- data[!idx, ]
+  data_a <- data[idx,]
+  data_b <- data[!idx,]
 
   # construct formulas
   fml_reg <- paste(fml_comp$dep_var, "~", fml_comp$indep_var)
 
   # currently; pooled reg without group ind as suggested by Neumark (1988)
-  fml_reg_pooled_neumark1988 <- paste(fml_comp$dep_var, "~", fml_comp$indep_var)
-  fml_reg_pooled_jann2008 <- paste(fml_comp$dep_var, "~", fml_comp$indep_var, "+", fml_comp$group_var)
+  fml_reg_pooled_neumark1988 <-
+    paste(fml_comp$dep_var, "~", fml_comp$indep_var)
+  fml_reg_pooled_jann2008 <-
+    paste(fml_comp$dep_var,
+          "~",
+          fml_comp$indep_var,
+          "+",
+          fml_comp$group_var)
 
   # convert to formula object
   fml_reg <- as.formula(fml_reg)
-  fml_reg_pooled_neumark1988 <- as.formula(fml_reg_pooled_neumark1988)
+  fml_reg_pooled_neumark1988 <-
+    as.formula(fml_reg_pooled_neumark1988)
   fml_reg_pooled_jann2008 <- as.formula(fml_reg_pooled_jann2008)
 
-  mod_a = lm(fml_reg, data=data_a)
-  mod_b = lm(fml_reg, data=data_b)
-  mod_pooled_neumark1988 = lm(fml_reg_pooled_neumark1988, data=data)
-  mod_pooled_jann2008 = lm(fml_reg_pooled_jann2008, data=data)
-
-  return(list(
-    mod_a = mod_a,
-    mod_b = mod_b,
-    mod_pooled_neumark1988 = mod_pooled_neumark1988,
-    mod_pooled_jann2008 = mod_pooled_jann2008
-  ))
+  model_args <- list(
+    group_a = list(fml_reg, data_a),
+    group_b = list(fml_reg, data_b),
+    pooled_neumark1988 = list(fml_reg_pooled_neumark1988, data),
+    pooled_jann2008 = list(fml_reg_pooled_jann2008, data)
+  )
+  models <-
+    lapply(model_args, function(x) assemble_model(x[[1]], x[[2]]))
+  models
 }
 
-extract_betas_EX = function(mod, baseline_invariant){
-
-  modmat = model.matrix(mod)
-  betas = coef(mod)
+extract_betas_EX = function(mod, baseline_invariant) {
+  modmat = mod$modmat
+  betas = coef(mod$fit)
+  betas[is.na(betas)] <- 0
 
   # if baseline variant;
   # identify factor variables and associated dummy indicators
   # apply gardeazabal2004 ommitted baseline correction per set of dummy variables
-  if (baseline_invariant){
+  if (baseline_invariant) {
     # identify factor terms
     factor_variables = names(attr(modmat, "contrasts"))
 
@@ -135,8 +249,7 @@ extract_betas_EX = function(mod, baseline_invariant){
     term_assignments = terms[term_assignments_i]
 
     # for each dummy encoded term; adjust the betas; save and add a baseline coef to beta and modmat
-    for(factor_var in factor_variables){
-
+    for (factor_var in factor_variables) {
       # beta adjustment
       dummy_index_in_beta = 1 + which(term_assignments == factor_var)
       k = length(dummy_index_in_beta) + 1
@@ -145,101 +258,138 @@ extract_betas_EX = function(mod, baseline_invariant){
       betas[dummy_index_in_beta] = betas[dummy_index_in_beta] - c
 
       # add baseline level
-      betas[length(betas)+1] = -c
-      baseline_name = paste(factor_var, ".baseline", sep="")
+      betas[length(betas) + 1] = -c
+      baseline_name = paste(factor_var, ".baseline", sep = "")
       names(betas)[length(betas)] = baseline_name
 
       # add baseline indicator to modmat
-      baseline_indicator = ifelse(rowSums(modmat[, dummy_index_in_beta, drop=FALSE]) == 0, 1, 0)
+      baseline_indicator = ifelse(rowSums(modmat[, dummy_index_in_beta, drop =
+                                                   FALSE]) == 0, 1, 0)
       modmat = cbind(modmat, baseline_indicator)
       colnames(modmat)[ncol(modmat)] = baseline_name
     }
   }
 
+  # Fix intercept renaming
+  colnames(modmat)[1] <- colnames(model.matrix(mod$fit))[1]
   EX = apply(modmat, mean, MARGIN = 2)
 
-  return(list(
-    betas=betas,
-    EX=EX
-  ))
+  return(list(betas = betas,
+              EX = EX))
 }
 
-calculate_coefs <- function(fitted_models, type, pooled = "neumark", baseline_invariant) {
+join_terms <-
+  function(
+    x,
+    y
+  ) {
+    x_and_y <-
+      merge(x = x, y = y, by = "row.names", all = TRUE)
+    rownames(x_and_y) <- x_and_y$Row.names
+    x_and_y <- x_and_y[-1]
 
-  r = lapply(fitted_models, extract_betas_EX, baseline_invariant)
-
-  # extract model matrix averages
-  EX_a <- r$mod_a$EX
-  EX_b <- r$mod_b$EX
-
-  # extract betas
-  B_a <- r$mod_a$betas
-  B_b <- r$mod_b$betas
-
-  if (pooled == "neumark"){
-    EX_pool = r$mod_pooled_neumark1988$EX
-    B_pool = r$mod_pooled_neumark1988$betas
-  } else{
-    EX_pool = r$mod_pooled_jann2008$EX  [names(EX_a)] # drops groupvar col
-    B_pool = r$mod_pooled_jann2008$betas[ names(B_a)]
+    x_and_y
   }
 
-  if (type == "threefold"){
+calculate_coefs <-
+  function(fitted_models,
+           type,
+           pooled = "neumark",
+           baseline_invariant) {
+    r = lapply(fitted_models, extract_betas_EX, baseline_invariant)
 
-    ENDOW = (EX_a - EX_b) * B_b
-    COEFF = EX_b * (B_a - B_b)
-    INTER = (EX_a - EX_b) * (B_a - B_b)
+    # extract model matrix averages
+    EX_a <- r$group_a$EX
+    EX_b <- r$group_b$EX
 
-    OVERALL_ENDOW = sum(ENDOW)
-    OVERALL_COEFF = sum(COEFF)
-    OVERALL_INTER = sum(INTER)
+    # extract betas
+    B_a <- r$group_a$betas
+    B_b <- r$group_b$betas
 
-    variable_level_results <- data.frame(
-      endowments = ENDOW,
-      coefficients = COEFF,
-      interaction = INTER
-    )
+    if (pooled == "neumark") {
+      EX_pool = r$pooled_neumark1988$EX
+      B_pool = r$pooled_neumark1988$betas
+    } else{
+      EX_pool = r$pooled_jann2008$EX  [names(EX_a)] # drops groupvar col
+      B_pool = r$pooled_jann2008$betas[names(B_a)]
+    }
 
-    overall_results <- list(
-      endowments = OVERALL_ENDOW,
-      coefficients = OVERALL_COEFF,
-      interaction = OVERALL_INTER
-    )
-  } else if (type == "twofold") {
+    # join terms properly
+    term_types <-
+      list(
+        EX_pool = EX_pool,
+        B_pool = B_pool,
+        EX_a = EX_a,
+        B_a = B_a,
+        EX_b = EX_b,
+        B_b = B_b
+      )
+    terms <-
+      Reduce(
+        join_terms,
+        mapply( # set nice column names
+          function(terms, nm) setNames(data.frame(terms), nm),
+          term_types,
+          names(term_types),
+          SIMPLIFY = FALSE
+        )
+      )
 
-    # results by variable
-    EXPL <- (EX_a - EX_b) * B_pool
-    UNEXPL_a <- EX_a * (B_a - B_pool)
-    UNEXPL_b <- EX_b * (B_pool - B_b)
-    UNEXPL <- UNEXPL_a + UNEXPL_b
+    rownames(terms)[which(rownames(terms) == "X.Intercept.")] <-
+      "(Intercept)"
 
-    # overall results
-    OVERALL_EXPL <- sum(EXPL)
-    OVERALL_UNEXPL_a <- sum(UNEXPL_a)
-    OVERALL_UNEXPL_b <- sum(UNEXPL_b)
-    OVERALL_UNEXPL <- sum(UNEXPL)
+    # calculate
+    if (type == "threefold") {
+      terms$endowments <- (terms$EX_a - terms$EX_b) * terms$B_b
+      terms$coefficients <- terms$EX_b * (terms$B_a - terms$B_b)
+      terms$interaction <-
+        (terms$EX_a - terms$EX_b) *
+        (terms$B_a - terms$B_b)
 
-    variable_level_results <- data.frame(
-      explained = EXPL,
-      unexplained = UNEXPL,
-      unexplained_a = UNEXPL_a,
-      unexplained_b = UNEXPL_b
-    )
 
-    overall_results <- list(
-      explained = OVERALL_EXPL,
-      unexplained = OVERALL_UNEXPL,
-      unexplained_a = OVERALL_UNEXPL_a,
-      unexplained_b = OVERALL_UNEXPL_b
-    )
+      OVERALL_ENDOW <- sum(terms$endowments)
+      OVERALL_COEFF <- sum(terms$coefficients)
+      OVERALL_INTER <- sum(terms$interaction)
+
+      variable_level_results <-
+        terms[c("endowments", "coefficients", "interaction")]
+
+      overall_results <- list(
+        endowments = OVERALL_ENDOW,
+        coefficients = OVERALL_COEFF,
+        interaction = OVERALL_INTER
+      )
+    } else if (type == "twofold") {
+      # results by variable
+      terms$explained <- (terms$EX_a - terms$EX_b) * terms$B_pool
+      terms$unexplained_a <- terms$EX_a * (terms$B_a - terms$B_pool)
+      terms$unexplained_b <- terms$EX_b * (terms$B_pool - terms$B_b)
+      terms$unexplained <- terms$unexplained_a + terms$unexplained_b
+
+      # overall results
+      OVERALL_EXPL <- sum(terms$explained)
+      OVERALL_UNEXPL_a <- sum(terms$unexplained_a)
+      OVERALL_UNEXPL_b <- sum(terms$unexplained_b)
+      OVERALL_UNEXPL <- sum(terms$unexplained)
+
+      variable_level_results <-
+        terms[
+          c("explained", "unexplained",
+            "unexplained_a", "unexplained_b")
+        ]
+
+      overall_results <- list(
+        explained = OVERALL_EXPL,
+        unexplained = OVERALL_UNEXPL,
+        unexplained_a = OVERALL_UNEXPL_a,
+        unexplained_b = OVERALL_UNEXPL_b
+      )
+    }
+
+    # return overall & varlevel
+    list(overall = overall_results,
+         varlevel = variable_level_results)
   }
-
-  # return overall & varlevel
-  list(
-    overall = overall_results,
-    varlevel = variable_level_results
-  )
-}
 
 get_bootstrap_ci = function(formula, data, n_bootstraps, type, pooled, baseline_invariant, conf_probs = conf_probs){
   bs = replicate(
@@ -379,9 +529,8 @@ OaxacaBlinderDecomp <- function(formula, data, type = "twofold", ref_group_auto 
 
   # collect descriptives
   results$gaps <- calculate_gap(
-    formula,
-    model.frame(fitted_models$mod_a),
-    model.frame(fitted_models$mod_b)
+    fitted_models$group_a$y,
+    fitted_models$group_b$y
   )
   results$meta <- list(
     type = type,
@@ -392,12 +541,19 @@ OaxacaBlinderDecomp <- function(formula, data, type = "twofold", ref_group_auto 
     data = input_data
   )
 
+    if (!is.null(n_bootstraps)) {
+      bootstrap_results = get_bootstrap_ci(
+        formula,
+        data,
+        n_bootstraps,
+        type = type,
+        pooled = pooled,
+        baseline_invariant = baseline_invariant,
+        conf_probs = conf_probs
+      )
+      results$bootstraps = bootstrap_results
+    }
 
-  if (!is.null(n_bootstraps)){
-    bootstrap_results = get_bootstrap_ci(formula, data, n_bootstraps, type=type, pooled=pooled, baseline_invariant=baseline_invariant, conf_probs = conf_probs)
-    results$bootstraps = bootstrap_results
+    class(results) <- "OaxacaBlinderDecomp"
+    results
   }
-
-  class(results) <- "OaxacaBlinderDecomp"
-  results
-}
