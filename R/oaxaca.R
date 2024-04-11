@@ -391,8 +391,8 @@ calculate_coefs <-
          varlevel = variable_level_results)
   }
 
-get_bootstrap_ci = function(formula, data, n_bootstraps, type, pooled, baseline_invariant, conf_probs = conf_probs){
-  bs = replicate(
+get_bootstrap_ests = function(formula, data, n_bootstraps, type, pooled, baseline_invariant, conf_probs = conf_probs){
+  runs = replicate(
     n_bootstraps,
     simplify = FALSE, {
       idx = sample.int(n = nrow(data), size = nrow(data), replace = TRUE)
@@ -412,15 +412,15 @@ get_bootstrap_ci = function(formula, data, n_bootstraps, type, pooled, baseline_
       out
     })
 
-    gaps_list = lapply(bs, `[[`, "gaps")
-    overall_level_list = lapply(bs, `[[`, "overall")
-    varlevel_list = lapply(bs, `[[`, "varlevel")
+    gaps_list = lapply(runs, `[[`, "gaps")
+    overall_level_list = lapply(runs, `[[`, "overall")
+    varlevel_list = lapply(runs, `[[`, "varlevel")
 
     gap_types = names(gaps_list[[1]])
     coef_types = names(overall_level_list[[1]])
     varlevel_coef_names = rownames(varlevel_list[[1]])
 
-    CI_gaps <- do.call(rbind, {
+    bs_gaps <- do.call(rbind, {
       lapply(gap_types, function(gaptype){
         estimates <- sapply(gaps_list, `[[`, gaptype)
         c(
@@ -430,7 +430,7 @@ get_bootstrap_ci = function(formula, data, n_bootstraps, type, pooled, baseline_
       }) |> setNames(gap_types)
     })
 
-    CI_overall = do.call(rbind, {
+    bs_overall = do.call(rbind, {
       lapply(coef_types, function(coeftype){
         estimates <- sapply(overall_level_list, `[[`, coeftype)
         c(
@@ -443,7 +443,7 @@ get_bootstrap_ci = function(formula, data, n_bootstraps, type, pooled, baseline_
     # helper function
     rbind_list = function(L) do.call(rbind, L)
 
-    CI_varlevel = lapply(coef_types, function(cftype){
+    bs_varlevel = lapply(coef_types, function(cftype){
       lapply(varlevel_coef_names, function(coefname){
         estimates <- sapply(varlevel_list, `[`, coefname, cftype)
           c(
@@ -455,8 +455,8 @@ get_bootstrap_ci = function(formula, data, n_bootstraps, type, pooled, baseline_
       setNames(coef_types) |>
       lapply(rbind_list)
 
-    CI_varlevel = lapply(coef_types, function(cf_type){
-        x = CI_varlevel[[cf_type]]
+    bs_varlevel = lapply(coef_types, function(cf_type){
+        x = bs_varlevel[[cf_type]]
         x = as.data.frame(x)
         x["coef_type"] = cf_type
         x["term"] = rownames(x)
@@ -466,9 +466,9 @@ get_bootstrap_ci = function(formula, data, n_bootstraps, type, pooled, baseline_
       rbind_list()
 
       return(list(
-        gaps = CI_gaps,
-        overall=CI_overall,
-        varlevel=CI_varlevel
+        gaps = bs_gaps,
+        overall=bs_overall,
+        varlevel=bs_varlevel
       ))
 }
 
