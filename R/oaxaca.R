@@ -405,9 +405,8 @@ get_bootstrap_ests = function(formula, data, n_bootstraps, type, pooled, baselin
         baseline_invariant = baseline_invariant
       )
       out$gaps <- calculate_gap(
-        formula,
-        model.frame(fitted_models$mod_a),
-        model.frame(fitted_models$mod_b)
+        fitted_models$group_a$y,
+        fitted_models$group_b$y
       )
       out
     })
