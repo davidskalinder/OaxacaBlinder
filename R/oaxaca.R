@@ -570,7 +570,13 @@ OaxacaBlinderDecomp <- function(formula, data, type = "twofold", ref_group_auto 
       This is a bug.  Please report it at
       https://github.com/sinanpl/OaxacaBlinder/issues ." =
       all.equal(
-        sum(results$varlevel, na.rm = TRUE),
+        sum(
+          results$varlevel[
+            !(names(results$varlevel)
+              %in% c("unexplained_a", "unexplained_b"))
+          ],
+          na.rm = TRUE
+        ),
         results$gaps$gap
       )
     )
