@@ -1,14 +1,3 @@
-# bootstrapped gaps haven't changed
-
-    Code
-      obd$bootstraps$gaps
-    Output
-                       se       2.5%      97.5%
-      gap     0.023386760 0.15953913 0.23560859
-      pct_gap 0.008383587 0.05962221 0.08679097
-      EY_a    0.028655738 2.66036591 2.74872068
-      EY_b    0.028167210 2.47231616 2.55630572
-
 # threefold results with bootstraps haven't changed
 
     Code
@@ -169,4 +158,15 @@
       26 -0.008986461  0.0032964776
       27 -0.008264279  0.0180079029
       28 -0.009601839  0.0157995873
+
+# bootstrapped gaps haven't changed
+
+    Code
+      obd$bootstraps$gaps
+    Output
+                       se       2.5%      97.5%
+      gap     0.023386760 0.15953913 0.23560859
+      pct_gap 0.008383587 0.05962221 0.08679097
+      EY_a    0.028655738 2.66036591 2.74872068
+      EY_b    0.028167210 2.47231616 2.55630572
 
