@@ -13,6 +13,10 @@ knitr::opts_chunk$set(
 )
 ```
 
+# Branches of this package are unstable
+
+This package is for development and testing of https://github.com/sinanpl/OaxacaBlinder .  Please use that package and not this one.  Branches in this repository, particularly `testing` and `master`, may be removed, replaced, or have their histories rewritten at any point.
+
 # OaxacaBlinder
 
 <!-- badges: start -->
