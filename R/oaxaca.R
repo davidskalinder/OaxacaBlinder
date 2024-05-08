@@ -386,7 +386,7 @@ calculate_coefs <-
       OVERALL_INTER <- sum(terms$interaction)
 
       variable_level_results <-
-        terms[c("endowments", "coefficients", "interaction")]
+        terms[c("endowments", "coefficients", "interaction", "EX_a", "EX_b")]
 
       overall_results <- list(
         endowments = OVERALL_ENDOW,
@@ -410,7 +410,8 @@ calculate_coefs <-
         terms[
           c(
             "explained", "unexplained",
-            "unexplained_a", "unexplained_b"
+            "unexplained_a", "unexplained_b",
+            "EX_a", "EX_b"
           )
         ]
 
@@ -532,7 +533,7 @@ get_bootstraps <- function(formula,
         isTRUE(all.equal(
           sum(
             x$varlevel[!(names(x$varlevel)
-            %in% c("unexplained_a", "unexplained_b"))],
+            %in% c("unexplained_a", "unexplained_b", "EX_a", "EX_b"))],
             na.rm = FALSE
           ),
           x$gaps$gap
@@ -727,7 +728,7 @@ OaxacaBlinderDecomp <-
           sum(
             decomp$results$varlevel[
               !(names(decomp$results$varlevel)
-              %in% c("unexplained_a", "unexplained_b"))
+              %in% c("unexplained_a", "unexplained_b", "EX_a", "EX_b"))
             ],
             na.rm = TRUE
           ),
