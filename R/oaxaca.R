@@ -422,6 +422,8 @@ calculate_coefs <-
         unexplained_b = OVERALL_UNEXPL_b
       )
     }
+    variable_level_results$EX_gap <-
+      variable_level_results$EX_a - variable_level_results$EX_b
 
     # return overall & varlevel
     list(
@@ -533,7 +535,7 @@ get_bootstraps <- function(formula,
         isTRUE(all.equal(
           sum(
             x$varlevel[!(names(x$varlevel)
-            %in% c("unexplained_a", "unexplained_b", "EX_a", "EX_b"))],
+            %in% c("unexplained_a", "unexplained_b", "EX_a", "EX_b", "EX_gap"))],
             na.rm = FALSE
           ),
           x$gaps$gap
@@ -591,7 +593,7 @@ get_bootstraps <- function(formula,
     varlevel =
       list(
         runs = varlevel_list,
-        term_types = c(coef_types, "EX_a", "EX_b"),
+        term_types = c(coef_types, "EX_a", "EX_b", "EX_gap"),
         coef_names = varlevel_coef_names
       )
   )
@@ -728,7 +730,7 @@ OaxacaBlinderDecomp <-
           sum(
             decomp$results$varlevel[
               !(names(decomp$results$varlevel)
-              %in% c("unexplained_a", "unexplained_b", "EX_a", "EX_b"))
+              %in% c("unexplained_a", "unexplained_b", "EX_a", "EX_b", "EX_gap"))
             ],
             na.rm = TRUE
           ),
