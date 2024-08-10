@@ -1,5 +1,7 @@
 chicago_mod <- OaxacaBlinder::chicago
+chicago_mod$unwage <- -chicago_mod$ln.real.wage
 chicago_mod$too_young <- chicago_mod$age < 19
+chicago_mod$native <- !chicago_mod$foreign.born
 
 names(chicago_mod) <- gsub("\\.", "_", names(chicago_mod))
 
@@ -14,9 +16,10 @@ chicago_mod |> haven::write_dta(dta_path)
 
 command <-
   paste(
-    "oaxaca ln_real_wage",
-    "normalize(LTHS some_college college high_school advanced_degree),",
-    "by(too_young) relax"
+    "oaxaca unwage",
+    "normalize(LTHS some_college college high_school advanced_degree)",
+    "normalize(foreign_born native),",
+    "by(too_young) relax swap"
   )
 
 make_decomp_dofile(
