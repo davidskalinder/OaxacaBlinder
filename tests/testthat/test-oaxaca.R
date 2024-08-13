@@ -482,6 +482,11 @@ test_that("0-variance baseline-adjusted IV results match Stata", {
   chicago_long_mod$too_young <- chicago_long_mod$age < 19
   chicago_long_mod$foreign_born <- as.logical(chicago_long_mod$foreign_born)
 
+  # Stata's results are not baseline invariant when var is 0!  So set ref level.
+  chicago_long_mod$education <-
+    as.factor(chicago_long_mod$education) |>
+    relevel(ref = "LTHS") # use when nobody in group has AD
+
   fb_baseline_cat <- levels(as.factor(chicago_long_mod$foreign_born))[1]
   fb_baseline_rowname <- paste0("foreign_born", fb_baseline_cat)
   ed_baseline_cat <- levels(as.factor(chicago_long_mod$education))[1]
@@ -521,6 +526,37 @@ test_that("0-variance baseline-adjusted IV results match Stata", {
   testthat::expect_equal(
     obd_ests,
     stata_obd_ests
+  )
+})
+
+test_that("0-variance baseline-adjusted IV results don't change with IV type", {
+  chicago_long_mod <- chicago_long
+  # force viewpoint group flip so estimates are non-zero
+  chicago_long_mod$unwage <- -chicago_long_mod$ln_real_wage
+  chicago_long_mod$too_young <- chicago_long_mod$age < 19
+  chicago_long_mod$foreign_born <- as.logical(chicago_long_mod$foreign_born)
+
+  obd_charlog <-
+    OaxacaBlinderDecomp(
+      unwage ~ education + foreign_born | too_young,
+      chicago_long_mod,
+      baseline_invariant = TRUE,
+      type = "threefold"
+    )
+
+  chicago_long_mod$education <- as.factor(chicago_long_mod$education)
+  chicago_long_mod$foreign_born <- as.factor(chicago_long_mod$foreign_born)
+  obd_fct <-
+    OaxacaBlinderDecomp(
+      unwage ~ education + foreign_born | too_young,
+      chicago_long_mod,
+      baseline_invariant = TRUE,
+      type = "threefold"
+    )
+
+  testthat::expect_equal(
+    obd_charlog$varlevel,
+    obd_fct$varlevel
   )
 })
 
