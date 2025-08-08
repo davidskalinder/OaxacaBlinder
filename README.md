@@ -1,14 +1,6 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# Branches of this repository are unstable
-
-This repository is for development and testing of
-<https://github.com/sinanpl/OaxacaBlinder> . Please use that package and
-not this one. Branches in this repository, particularly `testing` and
-`master`, may be removed, replaced, or have their histories rewritten at
-any point.
-
 # OaxacaBlinder
 
 <!-- badges: start -->
