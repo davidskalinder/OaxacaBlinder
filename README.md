@@ -14,7 +14,7 @@ any point.
 <!-- badges: start -->
 
 [![experimental](http://badges.github.io/stability-badges/dist/experimental.svg)](http://github.com/badges/stability-badges)
-
+[![R-CMD-check](https://github.com/sinanpl/OaxacaBlinder/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sinanpl/OaxacaBlinder/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 This is an R implementation of `OaxacaBlinder` decomposition that comes
@@ -31,7 +31,7 @@ You can install the development version of `OaxacaBlinder` like so:
 
 ``` r
 # install.packages("remotes")
-remotes::install_github("SinanPolatoglu/OaxacaBlinder")
+remotes::install_github("sinanpl/OaxacaBlinder")
 ```
 
 ## Example
@@ -57,8 +57,8 @@ dplyr::glimpse(chicago_long)
 - The formula interface is similar to the `oaxaca` package: it should be
   specified as
   `dependent_var ~ x_var1 + x_var1 + ... + x_varK | group_var`.
-- OaxacaBlinder is capable of correcting for the ommitted baseline bias
-  for multipe sets of factor variables with the
+- OaxacaBlinder is capable of correcting for the omitted baseline bias
+  for multiple sets of factor variables with the
   `baseline_invariant=TRUE`
 - The `pooled` argument sets what reference $\beta_R$:
   - `neumark`: The parameters of a model **excluding** the group
@@ -66,7 +66,8 @@ dplyr::glimpse(chicago_long)
   - `jann`: The parameters of a model **including** the group variable
 
 ``` r
-twofold = OaxacaBlinderDecomp(
+set.seed(1973)
+twofold <- OaxacaBlinderDecomp(
   formula = real_wage ~ age + education | female,
   data = chicago_long,
   type = "twofold",
@@ -87,76 +88,104 @@ summary(twofold)
 #> 
 #> Gap: 3.83
 #> % Diff: 21.88%
-#>               coefficient   % of gap      2.5%     97.5%
-#> explained           -0.53     -13.9% -1.039878 0.2316466
-#> unexplained          4.37     113.9%  3.409848 5.4771586
-#> unexplained_a        1.89      49.2%  1.434921 2.3543057
-#> unexplained_b        2.48      64.6%  1.897927 3.1839947
+#>               coefficient   % of gap        se      2.5%     97.5% pval
+#> explained           -0.53     -13.9% 0.4180845 -1.434944 0.2887765 0.16
+#> unexplained          4.37     113.9% 0.6292984  3.252398 5.6389801 0.00
+#> unexplained_a        1.89      49.2% 0.2942611  1.411671 2.4729207 0.00
+#> unexplained_b        2.48      64.6% 0.3537071  1.859117 3.2261392 0.00
 ```
 
-In addition, coefficients can be extracted vor the variable-level
+In addition, coefficients can be extracted for the variable-level
 estimates
 
 ``` r
 coef(twofold)
-#>                          explained unexplained unexplained_a unexplained_b
-#> (Intercept)            0.000000000  5.00836516    2.61888654    2.38947862
-#> age                    0.220418162  1.07822114    0.31640221    0.76181894
-#> educationcollege      -0.009283372  0.01142439   -0.01935324    0.03077763
-#> educationhigh.school  -0.107295348 -0.52124445   -0.35213923   -0.16910523
-#> educationLTHS         -0.560862567 -1.15597710   -0.68768187   -0.46829523
-#> educationsome.college  0.184695669 -0.40644640   -0.15524704   -0.25119935
-#> education.baseline    -0.260197078  0.35251787    0.16750479    0.18501308
+#>                             explained unexplained unexplained_a unexplained_b
+#> (Intercept)               0.000000000  5.00836516    2.61888654    2.38947862
+#> age                       0.220418162  1.07822114    0.31640221    0.76181894
+#> educationadvanced.degree -0.260197078  0.35251787    0.16750479    0.18501308
+#> educationcollege         -0.009283372  0.01142439   -0.01935324    0.03077763
+#> educationhigh.school     -0.107295348 -0.52124445   -0.35213923   -0.16910523
+#> educationLTHS            -0.560862567 -1.15597710   -0.68768187   -0.46829523
+#> educationsome.college     0.184695669 -0.40644640   -0.15524704   -0.25119935
 ```
 
 Or with bootstrapped confidence intervals for variable level results
 
 ``` r
-coef(twofold, ci=TRUE)
-#>        coef_type                  term  coefficient        2.5%       97.5%
-#> 1      explained           (Intercept)  0.000000000  0.00000000  0.00000000
-#> 2      explained                   age  0.220418162 -0.02849327  0.55765066
-#> 3      explained    education.baseline -0.260197078 -0.61748658  0.14646005
-#> 4      explained      educationcollege -0.009283372 -0.12246907  0.12840663
-#> 5      explained  educationhigh.school -0.107295348 -0.41931238  0.22276470
-#> 6      explained         educationLTHS -0.560862567 -1.02579353 -0.08368186
-#> 7      explained educationsome.college  0.184695669  0.01597890  0.43775635
-#> 8    unexplained           (Intercept)  5.008365163  1.58402265  8.97546422
-#> 9    unexplained                   age  1.078221143 -2.50073269  4.10232479
-#> 10   unexplained    education.baseline  0.352517873  0.01954402  0.68795624
-#> 11   unexplained      educationcollege  0.011424394 -0.40306788  0.57312373
-#> 12   unexplained  educationhigh.school -0.521244454 -1.34578984  0.46195508
-#> 13   unexplained         educationLTHS -1.155977097 -1.77780115 -0.44370345
-#> 14   unexplained educationsome.college -0.406446395 -1.16426158  0.40679943
-#> 15 unexplained_a           (Intercept)  2.618886538  0.58902846  4.93553842
-#> 16 unexplained_a                   age  0.316402205 -1.66588068  1.92066744
-#> 17 unexplained_a    education.baseline  0.167504793  0.01649640  0.31314294
-#> 18 unexplained_a      educationcollege -0.019353236 -0.24599791  0.22101884
-#> 19 unexplained_a  educationhigh.school -0.352139226 -0.87541256  0.18268905
-#> 20 unexplained_a         educationLTHS -0.687681871 -1.07342655 -0.27352656
-#> 21 unexplained_a educationsome.college -0.155247041 -0.51210834  0.18889607
-#> 22 unexplained_b           (Intercept)  2.389478624  0.55787740  4.73674727
-#> 23 unexplained_b                   age  0.761818938 -1.08467766  2.74893404
-#> 24 unexplained_b    education.baseline  0.185013080 -0.02246951  0.36866967
-#> 25 unexplained_b      educationcollege  0.030777630 -0.20846532  0.35760704
-#> 26 unexplained_b  educationhigh.school -0.169105228 -0.70066040  0.29298816
-#> 27 unexplained_b         educationLTHS -0.468295226 -0.88848859 -0.14631335
-#> 28 unexplained_b educationsome.college -0.251199354 -0.82626529  0.26263690
+coef(twofold, ci = TRUE)
+#>        coef_type                     term  coefficient         se         2.5%
+#> 1      explained              (Intercept)  0.000000000 0.00000000  0.000000000
+#> 2      explained                      age  0.220418162 0.17417049 -0.091410524
+#> 3      explained educationadvanced.degree -0.260197078 0.21524096 -0.773532447
+#> 4      explained         educationcollege -0.009283372 0.07474587 -0.132752600
+#> 5      explained     educationhigh.school -0.107295348 0.19045141 -0.586152875
+#> 6      explained            educationLTHS -0.560862567 0.25074354 -0.939880049
+#> 7      explained    educationsome.college  0.184695669 0.12875609 -0.003837003
+#> 8    unexplained              (Intercept)  5.008365163 2.20539880  1.082182846
+#> 9    unexplained                      age  1.078221143 1.75125140 -2.158891075
+#> 10   unexplained educationadvanced.degree  0.352517873 0.25192252 -0.097228220
+#> 11   unexplained         educationcollege  0.011424394 0.27418584 -0.468845582
+#> 12   unexplained     educationhigh.school -0.521244454 0.52009114 -1.379697757
+#> 13   unexplained            educationLTHS -1.155977097 0.40936979 -1.924458790
+#> 14   unexplained    educationsome.college -0.406446395 0.45779201 -1.204477533
+#> 15 unexplained_a              (Intercept)  2.618886538 1.22525976  0.545658939
+#> 16 unexplained_a                      age  0.316402205 0.92630813 -1.588336437
+#> 17 unexplained_a educationadvanced.degree  0.167504793 0.10923229 -0.020622568
+#> 18 unexplained_a         educationcollege -0.019353236 0.12660152 -0.239781100
+#> 19 unexplained_a     educationhigh.school -0.352139226 0.31068609 -0.935464044
+#> 20 unexplained_a            educationLTHS -0.687681871 0.23997114 -1.174277347
+#> 21 unexplained_a    educationsome.college -0.155247041 0.21803016 -0.551545319
+#> 22 unexplained_b              (Intercept)  2.389478624 1.10725926  0.548002919
+#> 23 unexplained_b                      age  0.761818938 0.91009894 -0.985627670
+#> 24 unexplained_b educationadvanced.degree  0.185013080 0.14536079 -0.070810349
+#> 25 unexplained_b         educationcollege  0.030777630 0.15900823 -0.267248679
+#> 26 unexplained_b     educationhigh.school -0.169105228 0.26146368 -0.635785709
+#> 27 unexplained_b            educationLTHS -0.468295226 0.20801790 -0.861886628
+#> 28 unexplained_b    educationsome.college -0.251199354 0.26699278 -0.674083534
+#>          97.5% pval
+#> 1   0.00000000 0.00
+#> 2   0.65279282 0.10
+#> 3   0.14749455 0.18
+#> 4   0.20092160 0.86
+#> 5   0.22638256 0.60
+#> 6  -0.08627095 0.02
+#> 7   0.47558496 0.06
+#> 8   9.19828855 0.00
+#> 9   4.10080406 0.62
+#> 10  0.89887391 0.22
+#> 11  0.54474731 0.96
+#> 12  0.45293495 0.40
+#> 13 -0.46003370 0.02
+#> 14  0.57630707 0.52
+#> 15  5.18077724 0.02
+#> 16  1.89272482 0.84
+#> 17  0.41442471 0.16
+#> 18  0.22033196 0.84
+#> 19  0.16458701 0.28
+#> 20 -0.30903780 0.02
+#> 21  0.27713761 0.62
+#> 22  4.89176209 0.00
+#> 23  2.26706136 0.52
+#> 24  0.48785069 0.26
+#> 25  0.33624334 0.88
+#> 26  0.33882796 0.60
+#> 27 -0.16394466 0.02
+#> 28  0.33717668 0.52
 ```
 
 ### Threefold decomposition
 
 ``` r
-threefold = OaxacaBlinderDecomp(
+threefold <- OaxacaBlinderDecomp(
   real_wage ~ age + education | female, chicago_long,
-  type = "twofold",
-  pooled = "jann",
+  type = "threefold",
   baseline_invariant = TRUE
 )
 summary(threefold)
 #> Oaxaca Blinder Decomposition model
 #> ----------------------------------
-#> Type: twofold
+#> Type: threefold
 #> Formula: real_wage ~ age + education | female
 #> Data: chicago_long
 #> 
@@ -167,18 +196,26 @@ summary(threefold)
 #> 
 #> Gap: 3.83
 #> % Diff: 21.88%
-#>               coefficient   % of gap
-#> explained           -0.59     -15.4%
-#> unexplained          4.43     115.4%
-#> unexplained_a        0.00       0.0%
-#> unexplained_b        4.43     115.4%
+#>              coefficient   % of gap
+#> endowments         -0.41     -10.7%
+#> coefficients        4.57     119.1%
+#> interaction        -0.32      -8.3%
 coef(threefold)
-#>                          explained unexplained unexplained_a unexplained_b
-#> (Intercept)            0.000000000  5.00836516    0.30167882    4.70668634
-#> age                    0.207760327  1.09087898    0.63724953    0.45362944
-#> educationcollege      -0.009142399  0.01128342   -0.01545726    0.02674068
-#> educationhigh.school  -0.110733093 -0.51780671   -0.29583600   -0.22197071
-#> educationLTHS         -0.584635143 -1.13220452   -0.58369823   -0.54850629
-#> educationsome.college  0.171472514 -0.39322324   -0.19756114   -0.19566210
-#> education.baseline    -0.266963834  0.35928463    0.15362427    0.20566036
+#>                            endowments coefficients   interaction
+#> (Intercept)               0.000000000   5.00836516  0.0000000000
+#> age                       0.189129042   1.06573867  0.0437715888
+#> educationadvanced.degree -0.199562539   0.43417646 -0.1422931256
+#> educationcollege         -0.008208598   0.01072411 -0.0003744928
+#> educationhigh.school     -0.096298746  -0.49974365 -0.0324974106
+#> educationLTHS            -0.422071444  -0.99876035 -0.2960078660
+#> educationsome.college     0.124886299  -0.45496110  0.1083240704
 ```
+
+## Contributing
+
+Any contribution is appreciated. In case you notice any typos or
+opportunities for improvement, please open an issue or pull request.
+
+For developers: this project is set up for using pre-commit. Find out
+more [here](https://lorenzwalthert.github.io/precommit/) and [get
+started](https://lorenzwalthert.github.io/precommit/articles/precommit.html).
