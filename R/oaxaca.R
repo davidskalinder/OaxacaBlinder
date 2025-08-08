@@ -671,7 +671,7 @@ get_bootstraps <- function(formula,
     stop("Sum of estimates did not match gap between groups
       in any bootstrap runs.
       This is a bug.  Please report it at
-      https://github.com/sinanpl/OaxacaBlinder/issues .")
+      https://github.com/davidskalinder/OaxacaBlinder/issues .")
   } else if (sum(!bs_checksums) > 0) {
     runs_all <- runs_all[bs_checksums]
     warning(
@@ -680,7 +680,7 @@ get_bootstraps <- function(formula,
         sum(!bs_checksums), "bootstrap runs and were discarded.",
         sum(bs_checksums), "runs remain.",
         "This is a bug.  Please report it at
-          https://github.com/sinanpl/OaxacaBlinder/issues ."
+          https://github.com/davidskalinder/OaxacaBlinder/issues ."
       )
     )
   }
@@ -855,7 +855,7 @@ OaxacaBlinderDecomp <-
     stopifnot(
       "Sum of estimates does not match gap between groups.
       This is a bug.  Please report it at
-      https://github.com/sinanpl/OaxacaBlinder/issues ." =
+      https://github.com/davidskalinder/OaxacaBlinder/issues ." =
         all.equal(
           sum(
             decomp$results$varlevel[
